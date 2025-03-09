@@ -1,0 +1,12 @@
+flask
+python-dotenv
+langchain
+langchain_huggingface
+langchain_pinecone
+huggingface_hub
+transformers
+torch
+sentence-transformers
+pypdf
+pinecone-client
+sentencepiece
