@@ -2,16 +2,15 @@ from flask import Flask, render_template, jsonify, request
 from src.helper import download_hugging_face_embeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_community.vectorstores import Pinecone
-from langchain_core.runnables import RunnableLambda
-from langchain_chains.combine_documents import create_stuff_documents_chain
-from langchain_chains.retrieval import create_retrieval_chain
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains.retrieval import create_retrieval_chain
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 from src.prompt import *
 from huggingface_hub import InferenceClient
 import os
 import logging
-import time
 
 app = Flask(__name__)
 load_dotenv()
@@ -36,24 +35,23 @@ docsearch = PineconeVectorStore.from_existing_index(
     embedding=embeddings
 )
 
-# Initialize Retriever with fewer docs to speed up retrieval
+# Initialize Retriever
 retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k": 2})
 
 # Initialize Hugging Face Inference Client (Load once)
 client = InferenceClient(model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", token=HUGGINGFACE_API_KEY)
 
-# Function to Query Model with optimizations
+# Function to Query Model
 def query_hf(prompt):
     try:
+        # Convert ChatPromptValue to a string
         if hasattr(prompt, "to_string"):
             prompt_str = prompt.to_string()
         else:
             prompt_str = str(prompt)
         
-        start_time = time.time()
-        response = client.text_generation(prompt_str, max_new_tokens=128, temperature=0.7)
-        elapsed_time = time.time() - start_time
-        logger.info(f"Response Time: {elapsed_time:.2f}s")
+        # Send the prompt to the Hugging Face Inference API with a timeout
+        response = client.text_generation(prompt_str, max_new_tokens=256, temperature=0.7)  # 10-second timeout
         return response
     except Exception as e:
         logger.error(f"Error in query_hf: {e}")
@@ -83,20 +81,22 @@ def index():
 @app.route("/get", methods=["GET", "POST"])
 def chat():
     try:
+        # Get user input from the form
         msg = request.form.get("msg", "").strip()
         logger.info(f"User Input: {msg}")
-        
+
+        # Validate input
         if not msg:
             return jsonify({"error": "Invalid input. Please provide a valid message."}), 400
-        
+
+        # Pass the input to the RAG pipeline
         response = rag_chain.invoke({"input": msg})
-        answer = response.get("answer", "Error: No answer generated.")
-        
-        logger.info(f"Model Response: {answer}")
-        return jsonify({"response": answer})
+        logger.info(f"Model Response: {response['answer']}")
+
+        # Return the response as JSON
+        return jsonify({"response": response["answer"]})
     except Exception as e:
         logger.error(f"Error in /get endpoint: {e}")
         return jsonify({"error": "An error occurred while processing your request."}), 500
-
 if __name__ == "__main__":
-    app.run(threaded=True, debug=False)
+    app.run()
