@@ -23,34 +23,39 @@ logger = logging.getLogger(__name__)
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
-# Initialize Embeddings
+# Initialize Embeddings (Load once)
 embeddings = download_hugging_face_embeddings()
 
 # Define Pinecone Index
 index_name = "medbot"
 
-# Embed each chunk and upsert into Pinecone
+# Initialize Pinecone Vector Store (Load once)
 docsearch = PineconeVectorStore.from_existing_index(
     index_name=index_name,
     embedding=embeddings
 )
 
+# Initialize Retriever
 retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 
-# Initialize Hugging Face Inference Client
+# Initialize Hugging Face Inference Client (Load once)
 client = InferenceClient(model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", token=HUGGINGFACE_API_KEY)
 
 # Function to Query Model
 def query_hf(prompt):
-    # Convert ChatPromptValue to a string
-    if hasattr(prompt, "to_string"):
-        prompt_str = prompt.to_string()
-    else:
-        prompt_str = str(prompt)
-    
-    # Send the prompt to the Hugging Face Inference API
-    response = client.text_generation(prompt_str, max_new_tokens=256, temperature=0.7)
-    return response
+    try:
+        # Convert ChatPromptValue to a string
+        if hasattr(prompt, "to_string"):
+            prompt_str = prompt.to_string()
+        else:
+            prompt_str = str(prompt)
+        
+        # Send the prompt to the Hugging Face Inference API with a timeout
+        response = client.text_generation(prompt_str, max_new_tokens=256, temperature=0.7, timeout=10)  # 10-second timeout
+        return response
+    except Exception as e:
+        logger.error(f"Error in query_hf: {e}")
+        return "An error occurred while generating the response."
 
 # Wrap the query_hf function in a Runnable
 query_runnable = RunnableLambda(query_hf)
@@ -91,8 +96,7 @@ def chat():
         # Return the response as JSON
         return jsonify({"response": response["answer"]})
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error in /get endpoint: {e}")
         return jsonify({"error": "An error occurred while processing your request."}), 500
-
 if __name__ == "__main__":
     app.run()
