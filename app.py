@@ -3,8 +3,8 @@ from src.helper import download_hugging_face_embeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_community.vectorstores import Pinecone
 from langchain_core.runnables import RunnableLambda
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains.retrieval import create_retrieval_chain
+from langchain_chains.combine_documents import create_stuff_documents_chain
+from langchain_chains.retrieval import create_retrieval_chain
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 from src.prompt import *
@@ -51,7 +51,7 @@ def query_hf(prompt):
             prompt_str = str(prompt)
         
         start_time = time.time()
-        response = client.text_generation(prompt_str, max_new_tokens=128, temperature=0.7, timeout=5)
+        response = client.text_generation(prompt_str, max_new_tokens=128, temperature=0.7)
         elapsed_time = time.time() - start_time
         logger.info(f"Response Time: {elapsed_time:.2f}s")
         return response
